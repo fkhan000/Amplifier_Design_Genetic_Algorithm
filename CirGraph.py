@@ -1,182 +1,142 @@
-import numpy as np
+import CirComp
+import Metrics
+import os
 
-#model parts for components that program will use 
-NPN_MODEL = "Q2N2222"
-PNP_MODEL = "Q2N3906"
-DIODE_MODEL = "D1N4148"
-
-
-##########################################################Component Class##########################################################
-
-#The component class represents a single element in the circuit.
+##########################################################Circuit Class##########################################################
 
 ####Class Attributes####
 
-##kind: string indicating component type. Currently, program supports following types:
-#Vsource, Resistor, Capacitor, Inductor, Diode, BJT, NMOS, and PMOS
-
-##name: string indicating reference name of component
-
-##nodes: list of names (strings) of nodes that component is connected to. For two
-#terminal components, 1st element is node cathode of component is connected to.
-#2nd element is node anode of component is connected to
-
-##params: list of floats indicating the parameters of the component. Diodes contain
-#no parameters in this program as well as BJTs. NMOS and PMOS transistors contain two
-#parameters width (element 0) and length (element 1). Capacitors, Resistors, Inductors,
-#and Voltage sources each contain one parameter which is the value of that component.
-
+##ID: (string) a unique identifier for the circuit used to locate its corresponding folder in the NetLists directory
+##components: (list) a list of Component objects holding all of the components used in the circuit
+##nodes: (set) a set of strings holding the names of all of the nodes in the circuit
 
 ####Class Methods####
 
+##expNetList: This function exports the circuit into a netlist file (Circuit{ID}.cir) in
+#the corresponding folder whose relative path is NetLists/Circuit{ID}.
 
-##mutate: This function performs gaussian mutation on each of the component's parameters.
-#Takes in two arguments, factor and pm. Factor is the standard deviation of the
-#gaussian distribution that the function samples from. pm is the probability that a single
-#parameter would be mutated.
+##fitness: This function assigns a fitness score (FoM) to the circuit by calling on the Metrics submodule
+#to produce the relevant measurements for the circuit. Takes in a fitFunc to calculate the fitness score
+#More will be discussed once the function is complete
+
+##mutate: This function mutates the circuit on a component level by adding gaussian noise to each of the component
+#parameters with some probability. The factor argument is the variance of the gaussian noise and pm is the probability
+#of mutating each component. The function will also mutate the circuit on a topological level by adding/removing components and
+#nodes as well as changing the nodes that a component connects to but currently this functionality is unavailable.
+
+##addComp: This function adds a component to the circuit. It takes in a Component object and adds it to the list
+#and if there are any new nodes, it will add those to nodes
+
+##delComp: This function deletes a component from the circuit given by the component's index in the component list.
+#It's currently a work in progress. I'm pretty sure
+#that what I have currently works for deleting two terminal devices but I'm not sure if it does for transistors.
+#The idea is that a component is removed from a circuit either by just taking it out and creating an open circuit
+#or by shorting it and replacing it with wire. If component connects to a node that isn't used by any other component
+#then that component created a node. If we just took out the component, we would likely have a floating node. So instead
+#we replace the component with a wire so that the nodes that the component joins become one node. If a component doesn't
+#create a node then we don't have to worry about this problem and we can just make an open circuit. In fact, making a short
+#here would be problematic since then if we had another component connecting these two nodes, it would also be effectively
+#removed from the circuit since no current would flow through it. With three terminal devices it gets tricky since
+#you can't really short a device like that. Maybe you can think of it as 2 two terminal devices?
+
+##__str__(): This function overrides the default __str__() function
 
 
-##pOut2Term: This is a helper function for the __str__ function and is used to print out
-#two terminal components. It takes in spWd which is a list of strings that are substituted
-#in the print out statement. For diodes, this list is empty but for the other two terminal devices
-#the first element is the quantity of the component's value and the second argument is the unit of that value
+class Circuit:
 
-##pOut3Term: This is a helper function for the __str__ function and is used to print out
-#three terminal components. It takes in spWd which is a list of strings that are substituted
-#in the print out statement. For BJTs this list is ["Collector", "Base", "Emitter"] and for
-#NMOS and PMOS, this list is ["Drain", "Gate", "Source" "Width", "Length"]
+    def __init__(self, ID, components, nodes):
 
-##__str__(): This function overrides the default __str__ function
-
-##netList(): This function returns the corresponding netlist line (a string) for this component.
-
-
-class Component:
-
-    def __init__(self, kind, name, nodes, params):
-        
-        self.kind = kind
-        self.name = name
+        self.ID = ID
+        self.components = components
         self.nodes = nodes
-        self.params = params
 
-    def mutate(self, factor, pm):
 
-        #sample len(self.params) values from a uniform distribution from 0 to 1
-        uniSamp = np.random.uniform(0, 1, len(self.params))
+    def expNetList(self):
+        file = "Circuit" + str(self.ID)
 
-        #for each parameter
-        for index in range(len(self.params)):
+        if not os.path.exists("NetLists/" + file):
+            os.makedirs("NetLists/" + file)
+        f = open("NetLists/" + file + "/" + file + ".cir", "w")
+        f.write("*Circuit # " + str(self.ID) + "\n\n")
 
-            #with probability pm we will mutate this parameter
-            if uniSamp[index] < pm:
+        #add in model definitions
+        f.write("*MODEL DEFINITIONS\n")
+        f.write(".model 2N2222 NPN(IS = 1E-14 VAF = 100 BF = 200 IKF = 0.3 XTB = 1.5 BR = 3 CJC = 8E-12 CJE = 25E-12 TR=100E-9 TF=400E-12 ITF=1 VTF = 2 XTF=3 RB=10 RC=.3 RE=.2 Vceo=30 lcrating=800m mfg=N)\n")
+        f.write(".model 1N4148 D(Is=2.52n Rs=.568 N=1.752 Cjo=4p M=.4 tt=20n lave=200m Vpk=75 mfg=OnSemi type=silicon\n")
 
-                #sample from a normal distribution centered around the parameter value
-                #and with standard deviation equal to the mutation factor
-                normSamp = np.random.normal(self.params[index], factor)
+        f.write(".model 2N3906 PNP(Is=1E-14 VAF=100 BF=200 IKF=0.4 XTB=1.5 BR=4 CJC=4.5E-12 CJE=10E-12 RB=20 RC=0.1 RE=0.1 TR=250E-9 TF=350E-12 ITF=1 VTF=2 XTF=3 Vceo=40 lcrating=200m mfg=NXP\n")
 
-                #After doing a bit of research I found that for gaussian mutation you
-                #generally want the length of the interval that the parameter can take on
-                #after mutating to be 10 times the mutation factor
-                lb = self.params[index] - 5*factor
-                ub = self.params[index] + 5*factor
-
-                #we set the parameter to be the sample we took from the gaussian distribution
-                #but clip to the lb and ub of the interval of values so that we don't get some
-                #incredibly large (or small) value that could break our circuit. 
-
-                #I also added 0 as an argument to the max function so that the mutation would never
-                #make the parameter negative which would likely make the ltSpice simulation throw an
-                #error
-                self.params[index] = min(max(normSamp, lb, 0), ub)
-            
-    
-    def pOut2Term(self, spWd):
         
-        output = self.kind + " " + self.name + ":\n"
+        f.write("*NETLIST DESCRIPTION\n")
 
-        output += "\tCathode: " + self.nodes[0] + "\n"
+        #iterate through list of components and call on netList function to get their corresponding line
+        for component in self.components:
+            f.write(component.netList() + "\n")
+            
+        f.close()
 
-        output += "\tAnode: " + self.nodes[1]
+    def fitness(self, fitFunc):
+        pass
 
-        #if spWd has length > 0 then the component isn't a diode
-        if len(spWd) > 0:
-            output += "\n\t" + spWd[0] + ": " + str(self.params[0]) + spWd[1]
+    
+    def mutuate(self, factor, pm):
 
-        return output
+        #to mutate component values, we just iterate through the list of components
+        #and call on their mutate function
+        for component in components:
+            component.mutate(factor, pm)
+    
+    
+    def addComp(self, comp):
 
-    def pOut3Term(self, spWd):
-        output = self.kind + " " + self.name + ":\n"
-        output += "\t" + spWd[0] + " : " + self.nodes[0] + "\n"
-        output += "\t" + spWd[1] + " : " + self.nodes[1] + "\n"
-        output += "\t" + spWd[2] + " : " + self.nodes[2]
+        self.components.append(comp)
+        for node in comp.nodes:
+            self.nodes.add(node)
+    
+    def delComp(self, index):
 
-        #if spWd has length > 3 then the component is a MOSFET
-        if len(spWd) > 3:
-            output += "\n\t" + spWd[3] + " : " + str(self.params[0]) + " m" + "\n"
-            output += "\t" + spWd[4] + " : " + str(self.params[1]) + " m"
+        #to see if we need to short or open the component we make a dictionary keeping the count
+        #of each of the nodes in the component
+        numNodes = dict(zip(self.components[index].nodes, [0 for node in self.components[index].nodes]))
+        
 
-        return output
+        #for each component
+        for component in self.components:
+            #iterate through the nodes it connects to
+            for node in component.nodes:
+                #if this component and the component to be deleted share a node
+                #we add it to the corresponding count
+                if node in numNodes:
+                    numNodes[node] += 1
+        #if the component to be deleted defined a node, we need to replace the component with a short
+                    
+        if sum([1 if val > 2 else 0 for val in numNodes.values()]) < 2*len(numNodes):
+
+            #for each component in the circuit
+            for idx in range(len(self.components)):
+                #if this component is the same as the one to be deleted, we move on to the next component
+                if idx == index:
+                    continue
+
+                #for each node
+                for ndx in range(len(self.components[idx].nodes)):
+
+                    #if the component and the component to be deleted share the node connected to the anode of the component to be deleted
+                    if self.component[idx].nodes[ndx] == self.components[index].nodes[1]:
+                        #set that node to be the node connected to the cathode of that anode. This is really similar
+                        #to deleting a node in a linked list. We're removing all references to the node that's being deleted
+                        self.component[idx].nodes[ndx] = self.components[index].nodes[0]
+
+                #after we do that we remove that node from node list
+                self.nodes.remove(self.components[index].nodes[1])
+
+        #and if the component doesn't define a node, we can just remove it from the list. We also have to do this
+        #if it does define a node.
+        self.components.pop(index)
 
     
     def __str__(self):
-
-        match self.kind:
-
-            case "Vsource":
-                return self.pOut2Term(["Voltage", "V"])
-            case "Resistor":
-                return self.pOut2Term(["Resistance", "\u03A9"])
-
-            case "Capacitor":
-                return self.pOut2Term(["Capacitance", "F"])
-
-            case "Inductor":
-                
-                return self.pOut2Term(["Inductance", "H"])
-
-            case "Diode":
-                return self.pOut2Term([])
-                
-            case "PNP":
-                return self.pOut3Term(["Collector", "Base", "Emitter"])
-
-            case "NPN":
-                return self.pOut3Term(["Collector", "Base", "Emitter"])
-            
-            case "PMOS":
-                return self.pOut3Term(["Drain", "Gate", "Source", "W", "L"])
-
-            case _:
-                return self.pOut3Term(["Drain", "Gate", "Source", "W", "L"])
-
-    
-    def netList(self):
-
-        output = self.name + " " + self.nodes[0] + " " + self.nodes[1]
-
-        #for diodes, bjts, and mosfets we also have to specify the model that we're using
-        if self.kind == "Diode":
-            return output + DIODE_MODEL
-
-        if self.kind == "Vsource":
-            return output +  " DC " + str(self.params[0])
-
-        if self.kind in ["Resistor", "Capacitor", "Inductor"]:
-            return output +  " " + str(self.params[0])
-        
-        output += " " + self.nodes[2]
-
-        if self.kind == "NPN":
-            return  output + " " + NPN_MODEL
-        if self.kind == "PNP":
-            return  output + " " + PNP_MODEL
-
-        #For the MOSFETs, they have an additonal pin called the substrate which for NMOS is connected to the emitter (or ground)
-        #and for PMOS their substrate pin is tied to the collector node. 
-        
-        if self.kind == "NMOS":
-            
-            return output + " " +  self.nodes[2] + " NMOS W=" + str(self.params[0]) + " L=" + str(self.params[1])
-
-        return output + " " + self.nodes[1] +" PMOS W=" + str(self.params[0]) + " L=" + str(self.params[1])
+        output = ""
+        for component in self.components:
+            output += component.__str__() + "\n"
+        return output
