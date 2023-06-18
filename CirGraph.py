@@ -1,4 +1,4 @@
-import CirComp
+import CirComp as Cir
 import Metrics
 import os
 
@@ -72,11 +72,9 @@ class Circuit:
         #iterate through list of components and call on netList function to get their corresponding line
         for component in self.components:
             f.write(component.netList() + "\n")
-            
+
         f.close()
 
-    def fitness(self, fitFunc):
-        pass
 
     
     def mutuate(self, factor, pm):
@@ -140,3 +138,16 @@ class Circuit:
         for component in self.components:
             output += component.__str__() + "\n"
         return output
+
+cir = Circuit("532", [], set())
+cir.addComp(Cir.Component("Vsource", "V1", ["N1", "0"], [10]))
+cir.addComp(Cir.Component("Resistor", "R1", ["N1", "N2"], [6000]))
+cir.addComp(Cir.Component("Resistor", "R2", ["N2", "0"], [500]))
+cir.addComp(Cir.Component("NPN", "Q1", ["N3", "N2", "N4"], []))
+cir.addComp(Cir.Component("Resistor", "R3", ["N4", "0"], [100]))
+cir.addComp(Cir.Component("Resistor", "R4", ["N1", "N3"], [100]))
+cir.addComp(Cir.Component("Capacitor", "C1", ["N5", "N2"], [1e-6]))
+
+cir.expNetList()
+            
+            
